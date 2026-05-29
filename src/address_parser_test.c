@@ -201,14 +201,13 @@ int main(int argc, char **argv) {
 
     log_info("transliteration module loaded\n");
 
-    if (!address_parser_load(address_parser_dir)) {
+    address_parser_t *parser = address_parser_load(address_parser_dir);
+    if (parser == NULL) {
         log_error("Could not initialize parser\n");
         exit(EXIT_FAILURE);
     }
 
     log_info("Finished initialization\n");
-
-    address_parser_t *parser = get_address_parser();
 
     if (parser->model_type == ADDRESS_PARSER_TYPE_GREEDY_AVERAGED_PERCEPTRON) {
         printf("averaged perceptron parser\n");
@@ -255,7 +254,7 @@ int main(int argc, char **argv) {
     free(results.confusion);
     free(confusion_sorted);
 
-    address_parser_module_teardown();
+    address_parser_module_teardown(&parser);
     transliteration_module_teardown();
     address_dictionary_module_teardown();
 }

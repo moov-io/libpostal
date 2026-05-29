@@ -1,9 +1,17 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <math.h>
 #include "transliterate.h"
 #include "file_utils.h"
 
 #include "log/log.h"
 #include "strndup.h"
+
+#ifdef HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 
 #define TRANSLITERATION_TABLE_SIGNATURE 0xAAAAAAAA
 
@@ -13,7 +21,21 @@
 #define NFKD "NFKD"
 #define STRIP_MARK "STRIP_MARK"
 
+/* Forward declaration so the pthread once initializer can call it */
+bool transliteration_table_load(char *filename);
+
 static transliteration_table_t *trans_table = NULL;
+
+#ifdef HAVE_PTHREAD_H
+static pthread_once_t translit_once = PTHREAD_ONCE_INIT;
+static char *translit_setup_path = NULL;
+
+static void translit_do_setup(void) {
+    if (trans_table != NULL) return;
+    const char *path = (translit_setup_path != NULL) ? translit_setup_path : DEFAULT_TRANSLITERATION_PATH;
+    transliteration_table_load((char *)path);
+}
+#endif
 
 transliteration_table_t *get_transliteration_table(void) {
     return trans_table;
@@ -1986,16 +2008,33 @@ bool transliteration_module_init(void) {
 }
 
 bool transliteration_module_setup(char *filename) {
-    if (trans_table == NULL) {
-        return transliteration_table_load(filename == NULL ? DEFAULT_TRANSLITERATION_PATH : filename);
+#ifdef HAVE_PTHREAD_H
+    if (filename != NULL && translit_setup_path == NULL) {
+        translit_setup_path = strdup(filename);
     }
-
-    return true;
+    if (pthread_once(&translit_once, translit_do_setup) != 0) {
+        return false;
+    }
+    return trans_table != NULL;
+#else
+    if (trans_table != NULL) {
+        return true;
+    }
+    return transliteration_table_load(filename == NULL ? DEFAULT_TRANSLITERATION_PATH : filename);
+#endif
 }
 
 
 void transliteration_module_teardown(void) {
     transliteration_table_destroy();
     trans_table = NULL;
+#ifdef HAVE_PTHREAD_H
+    if (translit_setup_path != NULL) {
+        free(translit_setup_path);
+        translit_setup_path = NULL;
+    }
+    /* Note: pthread_once cannot be reset portably. Subsequent setup calls
+       after teardown will do nothing. Callers should only teardown at shutdown. */
+#endif
 }
 

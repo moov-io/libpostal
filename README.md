@@ -716,6 +716,32 @@ ways the address parser can be improved even further (in order of difficulty):
    If you see a pattern of obviously bad address parses, the best thing to
    do is post an issue to Github.
 
+Thread safety / concurrent access
+---------------------------------
+
+As of the changes to eliminate unprotected global mutable state (primarily the
+address parser singleton + racy lazy initialization in the transliteration,
+numex, address dictionary, and language classifier modules), libpostal now
+supports concurrent access from multiple threads:
+
+* Call any of the `libpostal_setup*()` functions (including `libpostal_setup_parser()`)
+  any number of times, from any thread(s). The pthread_once guards ensure exactly
+  one initialization happens safely.
+* The address parser now returns an explicit `address_parser_t*` handle. The same
+  handle (or multiple handles) can be used concurrently from any number of threads
+  for `libpostal_parse_address()`. Each parse allocates its own scratch context,
+  removing the previous requirement to serialize all parsing behind a global lock.
+* Other functions (`libpostal_expand_address`, `libpostal_classify_language`, normalize
+  helpers, etc.) are likewise safe to call concurrently after the one-time setup,
+  as their underlying data tables are read-only after load.
+* Teardown functions are intended to be called only at process shutdown (after all
+  worker threads have finished using the library), as is conventional for this style
+  of C library.
+
+This makes libpostal suitable for use inside parallel execution environments such as
+DuckDB extensions, web server worker pools, etc., without forcing callers to wrap
+every call in a global mutex.
+
 Contributing
 ------------
 

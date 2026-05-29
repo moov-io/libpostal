@@ -221,11 +221,10 @@ typedef struct address_parser {
 
 address_parser_t *address_parser_new(void);
 address_parser_t *address_parser_new_options(parser_options_t options);
-address_parser_t *get_address_parser(void);
-bool address_parser_load(char *dir);
+address_parser_t *address_parser_load(char *dir);
 
-bool address_parser_print_features(bool print_features);
-libpostal_address_parser_response_t *address_parser_parse(char *address, char *language, char *country);
+bool address_parser_print_features(address_parser_t *parser, bool print_features);
+libpostal_address_parser_response_t *address_parser_parse(address_parser_t *parser, char *address, char *language, char *country);
 void address_parser_destroy(address_parser_t *self);
 
 char *address_parser_normalize_string(char *str);
@@ -243,13 +242,13 @@ bool address_parser_features(void *self, void *ctx, tokenized_string_t *str, uin
 
 // I/O methods
 
-bool address_parser_load(char *dir);
+address_parser_t *address_parser_load(char *dir);
 bool address_parser_save(address_parser_t *self, char *output_dir);
 
 // Module setup/teardown
 
-bool address_parser_module_setup(char *dir);
-void address_parser_module_teardown(void);
+address_parser_t *address_parser_module_setup(char *dir);
+void address_parser_module_teardown(address_parser_t **parser);
 
 
 #endif

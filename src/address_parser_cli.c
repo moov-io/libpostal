@@ -18,7 +18,12 @@ int main(int argc, char **argv) {
 
     printf("Loading models...\n");
 
-    if (!libpostal_setup() || !libpostal_setup_parser_datadir(address_parser_dir)) {
+    if (!libpostal_setup()) {
+        exit(EXIT_FAILURE);
+    }
+
+    address_parser_t *parser = libpostal_setup_parser_datadir(address_parser_dir);
+    if (parser == NULL) {
         exit(EXIT_FAILURE);
     }
 
@@ -79,12 +84,12 @@ int main(int argc, char **argv) {
             if (cstring_array_num_strings(command) > 1) {
                 char *flag = cstring_array_get_string(command, 1);
                 if (string_compare_case_insensitive(flag, "off") == 0) {
-                    libpostal_parser_print_features(false);
+                    libpostal_parser_print_features(parser, false);
                 } else if (string_compare_case_insensitive(flag, "on") == 0) {
-                    libpostal_parser_print_features(true);
+                    libpostal_parser_print_features(parser, true);
                 }
             } else {
-                libpostal_parser_print_features(true);
+                libpostal_parser_print_features(parser, true);
             }
 
             cstring_array_destroy(command);
@@ -99,7 +104,7 @@ int main(int argc, char **argv) {
         if (country != NULL) options.country = country;
         if (language != NULL) options.language = language;
 
-        if ((parsed = libpostal_parse_address(input, options))) {
+        if ((parsed = libpostal_parse_address(parser, input, options))) {
             printf("\n");
             printf("Result:\n\n");
             printf("{\n");
@@ -124,5 +129,5 @@ next_input:
     }
 
     libpostal_teardown();
-    libpostal_teardown_parser();
+    libpostal_teardown_parser(&parser);
 }

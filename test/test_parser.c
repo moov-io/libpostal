@@ -9,13 +9,15 @@
 
 SUITE(libpostal_parser_tests);
 
+static address_parser_t *test_parser = NULL;
+
 typedef struct labeled_component {
     char *label;
     char *component;
 } labeled_component_t;
 
 static greatest_test_res test_parse_result_equals(char *input, libpostal_address_parser_options_t options, size_t output_len, ...) {
-    libpostal_address_parser_response_t *response = libpostal_parse_address(input, options);
+    libpostal_address_parser_response_t *response = libpostal_parse_address(test_parser, input, options);
 
     va_list args;
 
@@ -1877,8 +1879,13 @@ TEST test_ru_parses(void) {
 }
 
 SUITE(libpostal_parser_tests) {
-    if (!libpostal_setup() || !libpostal_setup_parser()) {
+    if (!libpostal_setup()) {
         printf("Could not setup libpostal\n");
+        exit(EXIT_FAILURE);
+    }
+    test_parser = libpostal_setup_parser();
+    if (test_parser == NULL) {
+        printf("Could not setup libpostal parser\n");
         exit(EXIT_FAILURE);
     }
 
@@ -1909,5 +1916,5 @@ SUITE(libpostal_parser_tests) {
     RUN_TEST(test_ru_parses);
 
     libpostal_teardown();
-    libpostal_teardown_parser();
+    libpostal_teardown_parser(&test_parser);
 }

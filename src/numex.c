@@ -1,3 +1,7 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <math.h>
 #include <float.h>
 #include "numex.h"
@@ -5,8 +9,8 @@
 
 #include "log/log.h"
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
+#ifdef HAVE_PTHREAD_H
+#include <pthread.h>
 #endif
 
 #ifndef HAVE_STRNDUP
@@ -18,11 +22,25 @@
 
 #define NUMEX_SETUP_ERROR "numex module not setup, call libpostal_setup() or numex_module_setup()\n"
 
+/* Forward declaration for pthread once initializer */
+bool numex_table_load(char *filename);
+
 #define SEPARATOR_TOKENS "-"
 
 #define FLOOR_LOG_BASE(num, base) floor((log((float)num) / log((float)base)) + FLT_EPSILON)
 
 numex_table_t *numex_table = NULL;
+
+#ifdef HAVE_PTHREAD_H
+static pthread_once_t numex_once = PTHREAD_ONCE_INIT;
+static char *numex_setup_path = NULL;
+
+static void numex_do_setup(void) {
+    if (numex_table != NULL) return;
+    const char *path = (numex_setup_path != NULL) ? numex_setup_path : DEFAULT_NUMEX_PATH;
+    numex_table_load((char *)path);
+}
+#endif
 
 numex_table_t *get_numex_table(void) {
     return numex_table;
@@ -609,10 +627,20 @@ Must be called only once before the module can be used
 */
 
 bool numex_module_setup(char *filename) {
+#ifdef HAVE_PTHREAD_H
+    if (filename != NULL && numex_setup_path == NULL) {
+        numex_setup_path = strdup(filename);
+    }
+    if (pthread_once(&numex_once, numex_do_setup) != 0) {
+        return false;
+    }
+    return numex_table != NULL;
+#else
     if (numex_table == NULL) {
         return numex_table_load(filename == NULL ? DEFAULT_NUMEX_PATH : filename);
     }
     return true;
+#endif
 }
 
 /* Teardown method for the module
@@ -622,6 +650,12 @@ the end of a main method)
 void numex_module_teardown(void) {
     numex_table_destroy();
     numex_table = NULL;
+#ifdef HAVE_PTHREAD_H
+    if (numex_setup_path != NULL) {
+        free(numex_setup_path);
+        numex_setup_path = NULL;
+    }
+#endif
 }
 
 #define NULL_NUMEX_RESULT (numex_result_t) {0, GENDER_NONE, CATEGORY_DEFAULT, false, 0, 0}

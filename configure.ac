@@ -23,6 +23,17 @@ LDFLAGS="$LDFLAGS -L/usr/local/lib"
 AC_SEARCH_LIBS([log],
   [m],,[AC_MSG_ERROR([Could not find math library])])
 
+# pthreads for thread-safe one-time initialization of global data modules.
+# This is the key change that allows safe concurrent calls to libpostal
+# functions (parse, expand, normalize, classify, etc.) from multiple threads
+# after a single setup, removing the previous forced single-threaded usage.
+AC_CHECK_HEADERS([pthread.h])
+AC_SEARCH_LIBS([pthread_once], [pthread], [
+  AC_DEFINE([HAVE_PTHREAD], [1], [Define to 1 if you have the pthread library (for thread-safe setup)])
+  PTHREAD_LIBS="-lpthread"
+], [PTHREAD_LIBS=""])
+AC_SUBST([PTHREAD_LIBS])
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_TIME

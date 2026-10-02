@@ -154,6 +154,8 @@ typedef struct libpostal_address_parser_response {
 
 typedef libpostal_address_parser_response_t libpostal_parsed_address_components_t;
 
+typedef struct address_parser address_parser_t;  // forward; full def in address_parser.h
+
 typedef struct libpostal_address_parser_options {
     char *language;
     char *country;
@@ -163,9 +165,9 @@ LIBPOSTAL_EXPORT void libpostal_address_parser_response_destroy(libpostal_addres
 
 LIBPOSTAL_EXPORT libpostal_address_parser_options_t libpostal_get_address_parser_default_options(void);
 
-LIBPOSTAL_EXPORT libpostal_address_parser_response_t *libpostal_parse_address(char *address, libpostal_address_parser_options_t options);
+LIBPOSTAL_EXPORT libpostal_address_parser_response_t *libpostal_parse_address(address_parser_t *parser, char *address, libpostal_address_parser_options_t options);
 
-LIBPOSTAL_EXPORT bool libpostal_parser_print_features(bool print_features);
+LIBPOSTAL_EXPORT bool libpostal_parser_print_features(address_parser_t *parser, bool print_features);
 
 /*
 Language classification
@@ -267,9 +269,9 @@ LIBPOSTAL_EXPORT bool libpostal_setup(void);
 LIBPOSTAL_EXPORT bool libpostal_setup_datadir(char *datadir);
 LIBPOSTAL_EXPORT void libpostal_teardown(void);
 
-LIBPOSTAL_EXPORT bool libpostal_setup_parser(void);
-LIBPOSTAL_EXPORT bool libpostal_setup_parser_datadir(char *datadir);
-LIBPOSTAL_EXPORT void libpostal_teardown_parser(void);
+LIBPOSTAL_EXPORT address_parser_t *libpostal_setup_parser(void);
+LIBPOSTAL_EXPORT address_parser_t *libpostal_setup_parser_datadir(char *datadir);
+LIBPOSTAL_EXPORT void libpostal_teardown_parser(address_parser_t **parser);
 
 LIBPOSTAL_EXPORT bool libpostal_setup_language_classifier(void);
 LIBPOSTAL_EXPORT bool libpostal_setup_language_classifier_datadir(char *datadir);

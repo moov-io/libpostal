@@ -20,8 +20,6 @@
 
 #define DEFAULT_RARE_WORD_THRESHOLD 50
 
-static address_parser_t *parser = NULL;
-
 typedef enum {
     ADDRESS_PARSER_NULL_PHRASE,
     ADDRESS_PARSER_DICTIONARY_PHRASE,
@@ -45,11 +43,9 @@ address_parser_t *address_parser_new(void) {
     return address_parser_new_options(PARSER_DEFAULT_OPTIONS);
 }
 
-address_parser_t *get_address_parser(void) {
-    return parser;
-}
+// get_address_parser removed - no more global singleton for thread-safety and multi-instance support.
 
-bool address_parser_print_features(bool print_features) {
+bool address_parser_print_features(address_parser_t *parser, bool print_features) {
     if (parser == NULL) return false;
 
     parser->options.print_features = print_features;
@@ -163,8 +159,8 @@ static bool postal_code_context_exists(address_parser_t *self, uint32_t postal_c
     return graph_has_edge(g, postal_code_id, admin_id);
 }
 
-bool address_parser_load(char *dir) {
-    if (parser != NULL) return false;
+address_parser_t *address_parser_load(char *dir) {
+    address_parser_t *parser = NULL;
     if (dir == NULL) {
         dir = LIBPOSTAL_ADDRESS_PARSER_DIR;
     }
@@ -183,7 +179,7 @@ bool address_parser_load(char *dir) {
         } else {
             char_array_destroy(path);
             log_error("Averaged perceptron model could not be loaded\n");
-            return false;
+            return NULL;
         }
     } else {
         model_path = NULL;
@@ -203,7 +199,7 @@ bool address_parser_load(char *dir) {
             } else {
                 char_array_destroy(path);
                 log_error("Averaged perceptron model could not be loaded\n");
-                return false;
+                return NULL;
             }
         } else {
             model_path = NULL;
@@ -213,7 +209,7 @@ bool address_parser_load(char *dir) {
     if (parser == NULL) {
         char_array_destroy(path);
         log_error("Could not find parser model file of known type\n");
-        return false;
+        return NULL;
     }
 
     char_array_clear(path);
@@ -300,12 +296,12 @@ bool address_parser_load(char *dir) {
     }
 
     char_array_destroy(path);
-    return true;
+    return parser;
 
 exit_address_parser_created:
     address_parser_destroy(parser);
     char_array_destroy(path);
-    return false;
+    return NULL;
 }
 
 void address_parser_destroy(address_parser_t *self) {
@@ -1658,17 +1654,24 @@ libpostal_address_parser_response_t *address_parser_response_new(void) {
     return response;
 }
 
-libpostal_address_parser_response_t *address_parser_parse(char *address, char *language, char *country) {
+libpostal_address_parser_response_t *address_parser_parse(address_parser_t *parser, char *address, char *language, char *country) {
     if (address == NULL) return NULL;
 
-    address_parser_t *parser = get_address_parser();
-    if (parser == NULL || parser->context == NULL) {
-        log_error("parser is not setup, call libpostal_setup_address_parser()\n");
+    if (parser == NULL) {
+        log_error("parser is not setup, call libpostal_setup_parser()\n");
         return NULL;
     }
 
-    address_parser_context_t *context = parser->context;
+    // Allocate a fresh context for this parse. This removes shared mutable state
+    // from the parser instance, allowing concurrent calls to address_parser_parse
+    // (and thus libpostal_parse_address) from multiple threads using the same parser handle.
+    address_parser_context_t *context = address_parser_context_new();
+    if (context == NULL) {
+        log_error("Failed to allocate parse context\n");
+        return NULL;
+    }
 
+    libpostal_address_parser_response_t *response = NULL;
     char *normalized = address_parser_normalize_string(address);
     bool is_normalized = normalized != NULL;
     if (!is_normalized) {
@@ -1713,7 +1716,7 @@ libpostal_address_parser_response_t *address_parser_parse(char *address, char *l
     country = NULL;
     address_parser_context_fill(context, parser, tokenized_str, language, country);
 
-    libpostal_address_parser_response_t *response = NULL;
+    response = NULL;
 
     // If the whole input string is a single known phrase at the SUBURB level or higher, bypass sequence prediction altogether
     phrase_t only_phrase = NULL_PHRASE;
@@ -1776,6 +1779,7 @@ libpostal_address_parser_response_t *address_parser_parse(char *address, char *l
             if (is_normalized) {
                 free(normalized);
             }
+            address_parser_context_destroy(context);
             return response;
         }
     }
@@ -1837,21 +1841,19 @@ libpostal_address_parser_response_t *address_parser_parse(char *address, char *l
         free(normalized);
     }
 
+    address_parser_context_destroy(context);
     return response;
 }
 
 
 
-bool address_parser_module_setup(char *dir) {
-    if (parser == NULL) {
-        return address_parser_load(dir);
-    }
-    return true;
+address_parser_t *address_parser_module_setup(char *dir) {
+    return address_parser_load(dir);
 }
 
-void address_parser_module_teardown(void) {
-    if (parser != NULL) {
-        address_parser_destroy(parser);
+void address_parser_module_teardown(address_parser_t **parser_ptr) {
+    if (parser_ptr != NULL && *parser_ptr != NULL) {
+        address_parser_destroy(*parser_ptr);
+        *parser_ptr = NULL;
     }
-    parser = NULL;
 }

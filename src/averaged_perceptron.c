@@ -7,11 +7,10 @@ static inline bool averaged_perceptron_get_feature_id(averaged_perceptron_t *sel
 }
 
 inline double_array *averaged_perceptron_predict_scores(averaged_perceptron_t *self, cstring_array *features) {
-    if (self->scores == NULL || self->scores->n == 0) self->scores = double_array_new_zeros((size_t)self->num_classes);
+    double_array *scores_arr = double_array_new_zeros((size_t)self->num_classes);
+    if (scores_arr == NULL) return NULL;
 
-    double_array_zero(self->scores->a, self->scores->n);
-
-    double *scores = self->scores->a;
+    double *scores = scores_arr->a;
 
     uint32_t i = 0;
     char *feature;
@@ -32,15 +31,14 @@ inline double_array *averaged_perceptron_predict_scores(averaged_perceptron_t *s
         }
     })
 
-    return self->scores;   
+    return scores_arr;   
 }
 
 inline double_array *averaged_perceptron_predict_scores_counts(averaged_perceptron_t *self, khash_t(str_uint32) *feature_counts) {
-    if (self->scores == NULL || self->scores->n == 0) self->scores = double_array_new_zeros((size_t)self->num_classes);
+    double_array *scores_arr = double_array_new_zeros((size_t)self->num_classes);
+    if (scores_arr == NULL) return NULL;
 
-    double_array_zero(self->scores->a, self->scores->n);
-
-    double *scores = self->scores->a;
+    double *scores = scores_arr->a;
 
     uint32_t i = 0;
     const char *feature;
@@ -62,14 +60,16 @@ inline double_array *averaged_perceptron_predict_scores_counts(averaged_perceptr
         }
     })
 
-    return self->scores;
+    return scores_arr;
 }
 
 
 inline uint32_t averaged_perceptron_predict(averaged_perceptron_t *self, cstring_array *features) {
     double_array *scores = averaged_perceptron_predict_scores(self, features);
+    if (scores == NULL) return 0;
 
     int64_t max_score = double_array_argmax(scores->a, scores->n);
+    double_array_destroy(scores);
 
     return (uint32_t)max_score;
 
@@ -77,8 +77,10 @@ inline uint32_t averaged_perceptron_predict(averaged_perceptron_t *self, cstring
 
 inline uint32_t averaged_perceptron_predict_counts(averaged_perceptron_t *self, khash_t(str_uint32) *feature_counts) {
     double_array *scores = averaged_perceptron_predict_scores_counts(self, feature_counts);
+    if (scores == NULL) return 0;
 
     int64_t max_score = double_array_argmax(scores->a, scores->n);
+    double_array_destroy(scores);
 
     return (uint32_t)max_score;
 }

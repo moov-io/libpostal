@@ -1,6 +1,14 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <dirent.h>
 #include <limits.h>
 #include <stdarg.h>
+
+#ifdef HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 
 #include "address_dictionary.h"
 
@@ -8,7 +16,21 @@
 
 #define ADDRESS_DICTIONARY_SETUP_ERROR "address_dictionary module not setup, call libpostal_setup() or address_dictionary_module_setup()\n"
 
+/* Forward declaration for pthread once initializer */
+bool address_dictionary_load(char *path);
+
 address_dictionary_t *address_dict = NULL;
+
+#ifdef HAVE_PTHREAD_H
+static pthread_once_t address_dict_once = PTHREAD_ONCE_INIT;
+static char *address_dict_setup_path = NULL;
+
+static void address_dict_do_setup(void) {
+    if (address_dict != NULL) return;
+    const char *path = (address_dict_setup_path != NULL) ? address_dict_setup_path : DEFAULT_ADDRESS_EXPANSION_PATH;
+    address_dictionary_load((char *)path);
+}
+#endif
 
 address_dictionary_t *get_address_dictionary(void) {
     return address_dict;
@@ -662,11 +684,20 @@ bool address_dictionary_save(char *path) {
 }
 
 inline bool address_dictionary_module_setup(char *filename) {
+#ifdef HAVE_PTHREAD_H
+    if (filename != NULL && address_dict_setup_path == NULL) {
+        address_dict_setup_path = strdup(filename);
+    }
+    if (pthread_once(&address_dict_once, address_dict_do_setup) != 0) {
+        return false;
+    }
+    return address_dict != NULL;
+#else
     if (address_dict == NULL) {
         return address_dictionary_load(filename == NULL ? DEFAULT_ADDRESS_EXPANSION_PATH: filename);
     }
-
     return true;
+#endif
 }
 
 void address_dictionary_module_teardown(void) {
@@ -674,4 +705,10 @@ void address_dictionary_module_teardown(void) {
         address_dictionary_destroy(address_dict);
     }
     address_dict = NULL;
+#ifdef HAVE_PTHREAD_H
+    if (address_dict_setup_path != NULL) {
+        free(address_dict_setup_path);
+        address_dict_setup_path = NULL;
+    }
+#endif
 }

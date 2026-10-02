@@ -1,6 +1,14 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include "language_classifier.h"
 
 #include <float.h>
+
+#ifdef HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 
 #include "language_features.h"
 #include "minibatch.h"
@@ -16,6 +24,27 @@
 #define MIN_PROB (0.05 - DBL_EPSILON)
 
 static language_classifier_t *language_classifier = NULL;
+
+#ifdef HAVE_PTHREAD_H
+static pthread_once_t language_classifier_once = PTHREAD_ONCE_INIT;
+static char *language_classifier_setup_path = NULL;
+
+static void language_classifier_do_setup(void) {
+    if (language_classifier != NULL) return;
+
+    const char *dir = (language_classifier_setup_path != NULL) ? language_classifier_setup_path : LIBPOSTAL_LANGUAGE_CLASSIFIER_DIR;
+
+    char_array *path = char_array_new_size(strlen(dir) + PATH_SEPARATOR_LEN + strlen(LANGUAGE_CLASSIFIER_FILENAME));
+    if (path == NULL) return;
+
+    char_array_cat_joined(path, PATH_SEPARATOR, true, 2, dir, LANGUAGE_CLASSIFIER_FILENAME);
+    char *classifier_path = char_array_get_string(path);
+
+    language_classifier = language_classifier_load(classifier_path);
+
+    char_array_destroy(path);
+}
+#endif
 
 void language_classifier_destroy(language_classifier_t *self) {
     if (self == NULL) return;
@@ -282,6 +311,15 @@ bool language_classifier_save(language_classifier_t *self, char *path) {
 // Module setup/teardown
 
 bool language_classifier_module_setup(char *dir) {
+#ifdef HAVE_PTHREAD_H
+    if (dir != NULL && language_classifier_setup_path == NULL) {
+        language_classifier_setup_path = strdup(dir);
+    }
+    if (pthread_once(&language_classifier_once, language_classifier_do_setup) != 0) {
+        return false;
+    }
+    return language_classifier != NULL;
+#else
     if (language_classifier != NULL) {
         return true;
     }
@@ -303,6 +341,7 @@ bool language_classifier_module_setup(char *dir) {
 
     char_array_destroy(path);
     return true;
+#endif
 }
 
 void language_classifier_module_teardown(void) {
@@ -310,5 +349,11 @@ void language_classifier_module_teardown(void) {
         language_classifier_destroy(language_classifier);
     }
     language_classifier = NULL;
+#ifdef HAVE_PTHREAD_H
+    if (language_classifier_setup_path != NULL) {
+        free(language_classifier_setup_path);
+        language_classifier_setup_path = NULL;
+    }
+#endif
 }
 
